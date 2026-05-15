@@ -1,0 +1,255 @@
+====== Smart Drawer Anti-Theft System ======
+
+===== Introduction =====
+
+The **Smart Drawer Anti-Theft System** is an embedded security system designed to protect a drawer, box, or small storage compartment against unauthorized access. The system uses an ESP32 microcontroller and detects suspicious activity using two complementary methods: motion detection with an I2C accelerometer and light detection using three LDR sensors placed inside the drawer.
+
+The purpose of the project is to build a realistic, low-cost and physically implementable anti-theft system using common components that can be connected on a breadboard. When the system is armed and detects movement, vibration or light inside the drawer, it will activate a passive buzzer and send a notification to a PC application through Bluetooth Low Energy.
+
+The initial idea came from the fact that a closed drawer is normally dark and still. Sudden light exposure or movement can indicate that someone opened the drawer or moved the protected box. By combining an accelerometer with three LDR sensors, the system can detect multiple types of unauthorized access and reduce false alarms.
+
+The project is useful because it demonstrates several embedded systems concepts in a practical application. From the hardware point of view, the current stage focuses on sensor wiring, power distribution, ADC inputs, I2C communication and transistor-based buzzer driving.
+
+  * analog sensor reading using ADC;
+  * I2C communication with an accelerometer;
+  * PWM signal generation for a passive buzzer;
+  * common ground and 3.3 V power distribution;
+  * safe interfacing between the ESP32 and external components.
+
+===== General Description =====
+
+The system is built around an **ESP32 LOLIN32 Lite** board, which acts as the main controller. The ESP32 reads the three LDR sensors through ADC pins, communicates with the accelerometer using the I2C bus and controls the passive buzzer using a PWM signal and a transistor driver.
+
+The user interface will be implemented through a PC application. There is no display and no physical keypad on the embedded device. The user will be able to arm or disarm the system remotely.
+
+The final system is planned to have three main states:
+
+  * **DISARMED** - the system is inactive. Sensors may still be read for debugging or status reporting, but they do not trigger the alarm. The buzzer is turned off.
+  * **ARMED** - the system monitors the accelerometer and the three LDR sensors. If movement, vibration or light is detected, the system enters the alarm state.
+  * **ALARM** - the buzzer is active and a notification is sent. The system remains in this state until a correct ''DISARM <PIN>'' command is received.
+
+The planned remote commands for the final software stage are:
+
+  * ''ARM <PIN>''
+  * ''DISARM <PIN>''
+  * ''STATUS''
+  * ''CHANGE_PIN <old_pin> <new_pin>''
+
+==== Block Diagram ====
+
+{{:pm:prj2026:jan.vaduva:diagrama_bloc.png?600|Smart Drawer Anti-Theft System block diagram}}
+
+The system contains the following modules:
+
+  * **ESP32 LOLIN32 Lite** - central processing unit of the project.
+  * **LDR sensor module** - three LDR voltage dividers connected to ADC pins.
+  * **Accelerometer module** - detects movement and vibration through I2C communication.
+  * **Buzzer driver** - passive buzzer controlled through a 2N2222 transistor and PWM.
+  * **Bluetooth communication module** - planned communication channel between the ESP32 and the PC application.
+  * **State machine firmware** - planned logic for the DISARMED, ARMED and ALARM states.
+
+The three LDR sensors are used for redundancy. Instead of triggering the alarm based on only one sensor, the planned firmware will use a two-out-of-three decision rule. This should make the light detection more reliable and reduce false alarms caused by sensor noise or uneven lighting.
+
+The accelerometer is used to detect drawer movement, vibration or sudden displacement. This is useful because someone may move the drawer or the whole box without fully opening it, in which case the light sensors may not detect a change immediately.
+
+===== Hardware Design =====
+
+==== Current Hardware Implementation Status ====
+
+At the current hardware milestone, the ESP32 LOLIN32 Lite is mounted on a breadboard together with:
+
+  * three LDR voltage dividers;
+  * an I2C accelerometer module;
+  * a passive buzzer driven through a 2N2222 NPN transistor;
+  * common 3.3 V and GND rails.
+
+The board is powered and programmed through USB during development. After the firmware is uploaded, the ESP32 can also be powered from an external USB power bank for standalone operation.
+
+The current hardware was tested with a firmware smoke test. The Serial Monitor confirms that:
+
+  * the ESP32 boots correctly;
+  * the accelerometer is detected on the I2C bus at address ''0x19'';
+  * the accelerometer returns ''WHO_AM_I = 0x33'', which indicates a LIS3DH-compatible device;
+  * at least one LDR reading is visible through the ADC;
+  * the board starts BLE advertising as ''SmartDrawerAlarm''.
+
+Current Serial Monitor evidence:
+
+<code>
+Smart Drawer Anti-Theft System boot
+[LOG] 221 BOOT
+[LOG] 1578 I2C 0x19 accel=LIS3DH-compatible addr=0x19 who=0x33
+[LOG] 1579 LDR raw1=939 base1=937 deltaThreshold=450
+[LOG] 1864 BLE advertising SmartDrawerAlarm
+</code>
+
+This proves that the ESP32 is running uploaded firmware, the I2C accelerometer is wired correctly and the ADC reading for the LDR circuit is functional. The second and third LDR sensors have also been physically added on GPIO35 and GPIO32 and will be verified together with the final three-sensor voting logic.
+
+==== Component List ====
+
+^ Component ^ Quantity ^ Role in project ^
+| ESP32 LOLIN32 Lite | 1 | Main microcontroller, sensor reading, buzzer control and Bluetooth communication |
+| LIS3DH-compatible accelerometer module | 1 | Motion and vibration detection over I2C |
+| LDR sensor | 3 | Light detection inside the drawer |
+| 10 kOhm resistor | 3 | Fixed resistors for the LDR voltage dividers |
+| Passive buzzer | 1 | Acoustic alarm |
+| 2N2222 NPN transistor | 1 | Low-side driver for the passive buzzer |
+| 1 kOhm resistor | 1 | Base resistor for the 2N2222 transistor |
+| Breadboard | 1 | Prototype assembly |
+| Jumper wires | as needed | Electrical connections |
+| USB cable | 1 | Firmware upload, serial debugging and power during development |
+| External USB power bank | 1, optional | Standalone power supply after firmware upload |
+
+==== Pin Mapping ====
+
+^ Module / Signal ^ ESP32 Pin ^ Reason for choosing this pin ^
+| LDR 1 voltage divider output | GPIO34 | ADC-capable input-only pin, suitable for analog sensing |
+| LDR 2 voltage divider output | GPIO35 | ADC-capable input-only pin, suitable for analog sensing |
+| LDR 3 voltage divider output | GPIO32 | ADC-capable GPIO, used for the third light sensor |
+| Accelerometer SDA | GPIO23 | Custom I2C data pin used by the firmware |
+| Accelerometer SCL | GPIO22 | I2C clock pin |
+| Buzzer PWM control | GPIO17 | PWM-capable GPIO used to drive the passive buzzer through a transistor |
+| Accelerometer VCC | 3.3 V | Sensor power supply compatible with ESP32 logic |
+| Accelerometer GND | GND | Common ground |
+| LDR voltage dividers VCC | 3.3 V | Keeps ADC voltage within ESP32 limits |
+| LDR voltage dividers GND | GND | Common ground |
+| Buzzer positive terminal | 3.3 V | Buzzer supply |
+| Buzzer negative terminal | 2N2222 collector | Transistor switches the buzzer to ground |
+
+GPIO34 and GPIO35 are input-only pins, which is acceptable for LDR measurements because the firmware only needs ADC input. GPIO32 is also ADC-capable and is used for the third LDR. GPIO23 and GPIO22 are used as custom I2C pins for the accelerometer. GPIO17 is used for PWM because the buzzer is passive and must be driven with a square wave, not just a static HIGH/LOW output.
+
+==== LDR Voltage Dividers ====
+
+Each LDR is connected as a voltage divider powered from **3.3 V**, so the output voltage remains compatible with the ESP32 ADC input range:
+
+<code>
+3.3V ---- LDR ---- ADC_PIN ---- 10 kOhm ---- GND
+</code>
+
+The ADC pins are:
+
+^ LDR ^ ADC pin ^
+| LDR1 | GPIO34 |
+| LDR2 | GPIO35 |
+| LDR3 | GPIO32 |
+
+The firmware will store a dark baseline during calibration and then compare the current ADC values with this baseline. The final light detection logic will use all three LDR sensors and will trigger the alarm only when at least two sensors detect a significant light change.
+
+==== Accelerometer Connection ====
+
+The accelerometer module is connected to the ESP32 using I2C:
+
+<code>
+ESP32 GPIO23  ->  SDA
+ESP32 GPIO22  ->  SCL
+ESP32 3.3V    ->  VCC
+ESP32 GND     ->  GND
+</code>
+
+The firmware performs an I2C scan at startup and reads the ''WHO_AM_I'' register. The detected sensor currently reports:
+
+<code>
+I2C address: 0x19
+WHO_AM_I:   0x33
+Type:       LIS3DH-compatible
+</code>
+
+This startup check is important because the exact accelerometer chip was not assumed only from the module appearance. The sensor is verified through I2C before being used for motion detection.
+
+==== Buzzer Driver ====
+
+The passive buzzer is controlled through a 2N2222 NPN transistor, not directly from an ESP32 GPIO pin. The ESP32 generates a PWM signal on GPIO17, and the transistor works as a low-side switch:
+
+<code>
+ESP32 GPIO17 --- 1 kOhm --- 2N2222 base
+2N2222 emitter ----------- GND
+2N2222 collector --------- buzzer negative terminal
+buzzer positive terminal - 3.3 V
+</code>
+
+The buzzer is passive, therefore it requires a PWM/tone signal. The transistor protects the ESP32 GPIO and allows the buzzer current to be switched externally.
+
+==== Electrical Diagram ====
+
+{{:pm:prj2026:jan.vaduva:diagrama_electrica.png?650|Smart Drawer hardware connection diagram}}
+
+The electrical diagram should show:
+
+  * all modules powered from 3.3 V;
+  * common GND rail for ESP32, sensors and buzzer driver;
+  * three independent LDR voltage dividers;
+  * accelerometer connected over I2C on GPIO23/GPIO22;
+  * buzzer connected through a 2N2222 transistor and a 1 kOhm base resistor;
+  * no ADC input connected to a voltage higher than 3.3 V.
+
+==== Hardware Photos and Evidence ====
+
+The following images should be uploaded using the OCW Media Manager and inserted here:
+
+  * a clear photo of the complete breadboard assembly;
+  * a close-up photo of the LDR voltage dividers;
+  * a close-up photo of the accelerometer wiring;
+  * a close-up photo of the buzzer and 2N2222 driver;
+  * a screenshot of the PlatformIO Serial Monitor showing the I2C scan, LDR reading and BLE advertising.
+
+Suggested image placeholders:
+
+{{:pm:prj2026:jan.vaduva:hardware_breadboard.jpg?600|Current breadboard implementation}}
+
+{{:pm:prj2026:jan.vaduva:serial_monitor_i2c_ldr_ble.png?600|Serial Monitor evidence: I2C, LDR and BLE}}
+
+==== Hardware Design Notes ====
+
+  * All sensors are powered from **3.3 V**.
+  * ADC pins must not receive voltages higher than 3.3 V.
+  * GPIO34 and GPIO35 are input-only pins, which is suitable for LDR readings.
+  * The buzzer is controlled through a transistor because it should not be powered directly from an ESP32 GPIO.
+  * All modules must share a common ground.
+  * USB is used for firmware upload, serial debugging and power during development.
+  * An external USB power bank can be used later for standalone operation after the firmware has already been uploaded.
+
+===== Software Design =====
+
+This section will be completed during the software milestone. At the current hardware milestone, only a basic firmware smoke test was used to verify that the connected hardware components can be accessed by the ESP32.
+
+===== Obtained Results =====
+
+This section will be completed after the full integration and testing stage.
+
+For the current hardware milestone, the obtained hardware results are:
+
+  * ESP32 firmware upload through USB is working;
+  * Serial Monitor output is available at 115200 baud;
+  * accelerometer I2C detection is working;
+  * the accelerometer returns ''WHO_AM_I = 0x33'';
+  * LDR ADC reading is visible;
+  * BLE advertising starts successfully.
+
+===== Conclusions =====
+
+At the current stage, the project has a working hardware prototype on breadboard. The most important hardware blocks are connected, and at least one component, the accelerometer, has been verified through I2C detection and ''WHO_AM_I'' reading. The LDR circuit also produces ADC readings, and the ESP32 is able to boot and advertise over BLE.
+
+The next hardware-related steps are to take clear photos of the assembled circuit, finish the electrical diagram, verify all three LDR sensors individually and test the passive buzzer driver.
+
+===== Source Code and Other GitHub Resources =====
+
+This section will be completed later with the public repository link and final source code structure.
+
+===== Journal =====
+
+^ Date ^ Progress ^
+| 2026-05-08 | Initial OCW project page created with project idea, block diagram and first hardware description. |
+| 2026-05-15 | Hardware pin mapping was finalized for ESP32 LOLIN32 Lite: LDRs on GPIO34/GPIO35/GPIO32, I2C on GPIO23/GPIO22 and buzzer PWM on GPIO17. |
+| 2026-05-15 | ESP32 firmware smoke test was uploaded successfully through USB using PlatformIO. |
+| 2026-05-15 | Serial Monitor confirmed accelerometer detection at I2C address 0x19 with WHO_AM_I value 0x33. |
+| 2026-05-15 | Three LDR voltage divider connections were added on the breadboard. |
+
+===== Bibliography/Resources =====
+
+  * ESP32 LOLIN32 Lite PlatformIO board documentation: https://docs.platformio.org/en/stable/boards/espressif32/lolin32_lite.html
+  * ESP32 LOLIN32 Lite pinout reference: https://www.mischianti.org/2021/07/30/esp32-wemos-lolin32-lite-high-resolution-pinout-and-specs/
+  * ST LIS3DH datasheet: https://www.st.com/resource/en/datasheet/lis3dh.pdf
+  * ST LIS3DSH datasheet: https://www.st.com/resource/en/datasheet/lis3dsh.pdf
+  * ST H3LIS331DL datasheet: https://www.st.com/resource/en/datasheet/h3lis331dl.pdf
+  * DokuWiki syntax reference: https://ocw.cs.pub.ro/courses/wiki/syntax
+  * PM project template: https://ocw.cs.pub.ro/courses/pm/pm/prj2021/template
