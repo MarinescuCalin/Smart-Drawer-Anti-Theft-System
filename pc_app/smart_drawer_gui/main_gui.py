@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import argparse
+import os
 import queue
 import sys
+import threading
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -13,6 +15,7 @@ from smart_drawer_client.logger import JsonlEventLogger
 from smart_drawer_client.models import BleEvent
 
 from .backends import DeviceInfo
+from .email_notifier import EmailConfig, EmailNotifier
 from .protocol import (
     SystemSnapshot,
     build_arm,
@@ -38,6 +41,7 @@ class SmartDrawerGui(tk.Tk):
         self.devices: list[DeviceInfo] = []
         self.snapshot = SystemSnapshot()
         self.logger = JsonlEventLogger(Path(__file__).resolve().parents[2] / "logs" / "smart_drawer_gui.jsonl")
+        self.alarm_email_sent = False
 
         self.use_mock = tk.BooleanVar(value=mock_mode)
         self.pin_var = tk.StringVar(value="1234")
@@ -51,6 +55,14 @@ class SmartDrawerGui(tk.Tk):
         self.last_update_var = tk.StringVar(value="-")
         self.alarm_active_var = tk.StringVar(value="No")
         self.raw_debug_visible = tk.BooleanVar(value=False)
+        self.email_enabled = tk.BooleanVar(value=False)
+        self.email_recipient_var = tk.StringVar()
+        self.smtp_host_var = tk.StringVar(value=os.getenv("SMART_DRAWER_SMTP_HOST", "smtp.gmail.com"))
+        self.smtp_port_var = tk.StringVar(value=os.getenv("SMART_DRAWER_SMTP_PORT", "465"))
+        self.smtp_username_var = tk.StringVar(value=os.getenv("SMART_DRAWER_SMTP_USERNAME", ""))
+        self.smtp_password_var = tk.StringVar(value=os.getenv("SMART_DRAWER_SMTP_PASSWORD", ""))
+        self.smtp_sender_var = tk.StringVar(value=os.getenv("SMART_DRAWER_SMTP_SENDER", ""))
+        self.smtp_tls_var = tk.BooleanVar(value=True)
 
         self._build_styles()
         self._build_layout()
@@ -89,8 +101,7 @@ class SmartDrawerGui(tk.Tk):
         root.rowconfigure(0, weight=1)
         root.rowconfigure(1, weight=0)
 
-        left = ttk.Frame(root, style="App.TFrame")
-        left.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        left = self._build_left_scroll_area(root)
         right = ttk.Frame(root, style="App.TFrame")
         right.grid(row=0, column=1, sticky="nsew")
         bottom = ttk.LabelFrame(root, text="Event Log", style="Panel.TLabelframe", padding=10)
@@ -99,8 +110,38 @@ class SmartDrawerGui(tk.Tk):
         self._build_connection_panel(left)
         self._build_security_panel(left)
         self._build_diagnostics_panel(left)
+        self._build_email_panel(left)
         self._build_status_panel(right)
         self._build_log_panel(bottom)
+
+    def _build_left_scroll_area(self, parent: ttk.Frame) -> ttk.Frame:
+        container = ttk.Frame(parent, style="App.TFrame")
+        container.grid(row=0, column=0, sticky="nsew", padx=(0, 12))
+        container.rowconfigure(0, weight=1)
+        container.columnconfigure(0, weight=1)
+
+        canvas = tk.Canvas(container, width=360, highlightthickness=0, bg="#f4f6f8")
+        scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
+        content = ttk.Frame(canvas, style="App.TFrame")
+        window_id = canvas.create_window((0, 0), window=content, anchor="nw")
+
+        def update_scroll_region(_: object | None = None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def update_content_width(event: tk.Event) -> None:
+            canvas.itemconfigure(window_id, width=event.width)
+
+        def on_mousewheel(event: tk.Event) -> None:
+            canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+
+        content.bind("<Configure>", update_scroll_region)
+        canvas.bind("<Configure>", update_content_width)
+        canvas.bind("<Enter>", lambda _: canvas.bind_all("<MouseWheel>", on_mousewheel))
+        canvas.bind("<Leave>", lambda _: canvas.unbind_all("<MouseWheel>"))
+        canvas.configure(yscrollcommand=scrollbar.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        return content
 
     def _build_connection_panel(self, parent: ttk.Frame) -> None:
         panel = ttk.LabelFrame(parent, text="Connection", style="Panel.TLabelframe", padding=12)
@@ -174,6 +215,38 @@ class SmartDrawerGui(tk.Tk):
         self.get_log_button.grid(row=1, column=1, sticky="ew", padx=(6, 0), pady=(8, 0))
         self.mock_alarm_button = ttk.Button(panel, text="Mock Alarm", command=lambda: self.send_command("MOCK_ALARM"))
         self.mock_alarm_button.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+
+    def _build_email_panel(self, parent: ttk.Frame) -> None:
+        panel = ttk.LabelFrame(parent, text="Email Alert", style="Panel.TLabelframe", padding=12)
+        panel.pack(fill="x", pady=(12, 0))
+        panel.columnconfigure(1, weight=1)
+
+        ttk.Checkbutton(panel, text="Enable alarm email", variable=self.email_enabled).grid(
+            row=0, column=0, columnspan=2, sticky="w", pady=(0, 8)
+        )
+        ttk.Label(panel, text="Recipient").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Entry(panel, textvariable=self.email_recipient_var).grid(row=1, column=1, sticky="ew", pady=2)
+
+        smtp_row = ttk.Frame(panel)
+        smtp_row.grid(row=2, column=0, columnspan=2, sticky="ew", pady=2)
+        smtp_row.columnconfigure(1, weight=1)
+        ttk.Label(smtp_row, text="SMTP").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Entry(smtp_row, textvariable=self.smtp_host_var).grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Entry(smtp_row, textvariable=self.smtp_port_var, width=7).grid(row=0, column=2, sticky="e")
+
+        auth_row = ttk.Frame(panel)
+        auth_row.grid(row=3, column=0, columnspan=2, sticky="ew", pady=2)
+        auth_row.columnconfigure((1, 3), weight=1)
+        ttk.Label(auth_row, text="User").grid(row=0, column=0, sticky="w", padx=(0, 8))
+        ttk.Entry(auth_row, textvariable=self.smtp_username_var).grid(row=0, column=1, sticky="ew", padx=(0, 8))
+        ttk.Label(auth_row, text="Pass").grid(row=0, column=2, sticky="w", padx=(0, 8))
+        ttk.Entry(auth_row, textvariable=self.smtp_password_var, show="*").grid(row=0, column=3, sticky="ew")
+
+        ttk.Label(panel, text="Sender").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=2)
+        ttk.Entry(panel, textvariable=self.smtp_sender_var).grid(row=4, column=1, sticky="ew", pady=2)
+        ttk.Checkbutton(panel, text="Use SMTP SSL", variable=self.smtp_tls_var).grid(
+            row=5, column=0, columnspan=2, sticky="w", pady=(6, 0)
+        )
 
     def _build_status_panel(self, parent: ttk.Frame) -> None:
         parent.columnconfigure(0, weight=1)
@@ -336,12 +409,15 @@ class SmartDrawerGui(tk.Tk):
             else:
                 self.connection_var.set(event.message)
         elif event.kind == "status":
+            previous_state = self.snapshot.state
             self.snapshot = parse_status_message(event.message, self.snapshot)
             self._refresh_status()
+            self._handle_alarm_email(previous_state, event.message)
         elif event.kind == "device_log":
             self.snapshot.last_event = event.message
             self.snapshot.last_update = datetime.now()
             self._refresh_status()
+            self._handle_alarm_email(self.snapshot.state, event.message)
         elif event.kind == "error":
             self._set_connection_state("Error")
             self.connected = False
@@ -400,7 +476,58 @@ class SmartDrawerGui(tk.Tk):
         self.snapshot.state = state
         self.snapshot.alarm_active = state == "ALARM"
         self.snapshot.last_update = datetime.now()
+        if state != "ALARM":
+            self.alarm_email_sent = False
         self._refresh_status()
+
+    def _handle_alarm_email(self, previous_state: str, message: str) -> None:
+        if self.snapshot.state != "ALARM":
+            self.alarm_email_sent = False
+            return
+        if previous_state != "ALARM":
+            self.alarm_email_sent = False
+        if self.alarm_email_sent or not self.email_enabled.get():
+            return
+
+        config = self._email_config_from_form()
+        ok, error = config.validate()
+        if not ok:
+            self.alarm_email_sent = True
+            self._log("warning", f"Alarm email not sent: {error}")
+            return
+
+        self.alarm_email_sent = True
+        self._log("info", f"Sending alarm email to {config.recipient}")
+        thread = threading.Thread(
+            target=self._send_alarm_email_worker,
+            args=(config, message, self.snapshot.state),
+            daemon=True,
+        )
+        thread.start()
+
+    def _email_config_from_form(self) -> EmailConfig:
+        try:
+            port = int(self.smtp_port_var.get().strip())
+        except ValueError:
+            port = 0
+        sender = self.smtp_sender_var.get().strip() or self.smtp_username_var.get().strip()
+        return EmailConfig(
+            recipient=self.email_recipient_var.get().strip(),
+            smtp_host=self.smtp_host_var.get().strip(),
+            smtp_port=port,
+            username=self.smtp_username_var.get().strip(),
+            password=self.smtp_password_var.get(),
+            sender=sender,
+            use_tls=self.smtp_tls_var.get(),
+        )
+
+    def _send_alarm_email_worker(self, config: EmailConfig, alarm_message: str, system_state: str) -> None:
+        try:
+            EmailNotifier(config).send_alarm_alert(alarm_message, system_state)
+        except Exception as exc:
+            self.event_queue.put(GuiEvent("warning", f"Alarm email failed: {exc}"))
+            return
+        self.event_queue.put(GuiEvent("info", f"Alarm email sent to {config.recipient}"))
 
     def _refresh_status(self) -> None:
         state = self.snapshot.state

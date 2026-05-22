@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Smart Drawer Anti-Theft
+Comment=ESP32 Smart Drawer Anti-Theft System desktop GUI
+Exec=/home/calin/PM/Proiect/dist/SmartDrawerGUI/SmartDrawerGUI
+Icon=/home/calin/PM/Proiect/assets/icons/smart_drawer_icon_filled_512.png
+Terminal=false
+Categories=Utility;
+StartupNotify=true

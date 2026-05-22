@@ -149,7 +149,28 @@ SmartDrawerAlarm
    - lumineaza cel putin doua LDR-uri: alarma ar trebui sa porneasca.
 10. Pentru oprirea alarmei, apasa `DISARM`.
 
-## 7. Probleme Comune
+## 7. Optional: notificari pe email
+
+Aplicatia poate trimite email de pe laptop cand sistemul intra in `ALARM`.
+Firmware-ul de pe ESP32 nu trebuie modificat pentru asta.
+
+In aplicatia GUI:
+
+1. Completeaza sectiunea `Email Alert`.
+2. Bifeaza `Enable alarm email`.
+3. Pentru Gmail foloseste:
+
+```text
+SMTP host: smtp.gmail.com
+SMTP port: 465
+Use SMTP SSL: bifat
+Password: App Password de Gmail, nu parola normala
+```
+
+Aplicatia trimite un singur email pentru o sesiune de alarma.
+Dupa `DISARM`, la o alarma viitoare poate trimite din nou un email.
+
+## 8. Probleme Comune
 
 Daca upload-ul spune ca portul este ocupat:
 
@@ -176,4 +197,3 @@ BLE advertising SmartDrawerAlarm
 2. Inchide monitorul serial.
 3. Apasa `EN` / `RST` pe ESP32.
 4. In aplicatie apasa din nou `Scan`.
-

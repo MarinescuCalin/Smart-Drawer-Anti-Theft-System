@@ -9,5 +9,8 @@ pc_app/smart_drawer_client/__pycache__/
 pc_app/smart_drawer_gui/__pycache__/
 logs/*.jsonl
 *.pyc
+build/
+dist/
+*.spec
 *.md
 !tutorial.md
