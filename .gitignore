@@ -13,4 +13,5 @@ build/
 dist/
 *.spec
 *.md
+!README.md
 !tutorial.md
