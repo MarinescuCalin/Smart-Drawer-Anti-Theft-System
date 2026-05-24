@@ -52,7 +52,7 @@ The default PIN used during development is:
 
 ==== Block Diagram ====
 
-{{:pm:prj2026:jan.vaduva:diagrama_bloc.png?600|Smart Drawer Anti-Theft System block diagram}}
+{{:pm:prj2026:jan.vaduva:diagrama_schematica.png?600|Smart Drawer Anti-Theft System block diagram}}
 
 The system contains the following modules:
 
@@ -162,7 +162,7 @@ The buzzer is passive, therefore it requires a PWM/tone signal. The transistor p
 
 ==== Electrical Diagram ====
 
-{{:pm:prj2026:jan.vaduva:diagrama_electrica.png?650|Smart Drawer hardware connection diagram}}
+{{:pm:prj2026:jan.vaduva:diagrama_cablaj_hard.png?650|Smart Drawer hardware connection diagram}}
 
 The electrical diagram should show:
 
