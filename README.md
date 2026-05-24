@@ -286,8 +286,6 @@ This makes the project closer to a complete smart security prototype than to a s
 | Laboratory 4 | ADC | The three LDR voltage dividers are read through ESP32 ADC pins GPIO34, GPIO35 and GPIO32. The ADC readings are used to detect light changes when the drawer is opened. |
 | Laboratory 6 | I2C | The accelerometer is detected and read over I2C using SDA on GPIO23 and SCL on GPIO22. The firmware scans the I2C bus and reads the `WHO_AM_I` register to identify the sensor. |
 | Course 9 | Communication / BLE extension | The ESP32 communicates with the PC application using BLE GATT characteristics. BLE is used as an ESP32-specific wireless communication extension, related to the wireless communication concepts presented in Course 9 on OCW. |
-| Project software architecture | State machine | The firmware logic is organized around the `DISARMED`, `ARMED` and `ALARM` states. State transitions are triggered by valid BLE commands, motion detection or light detection. |
-| Project software extension | PC-side application | A Python GUI is used for user interaction, live status display, event logs, diagnostics and optional email notifications. |
 
 
 ### Firmware Architecture
